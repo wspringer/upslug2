@@ -5,7 +5,7 @@ AC_PREREQ(2.59)
 AC_INIT(upslug2, 12, http://sourceforge.net/projects/nslu/)
 AM_INIT_AUTOMAKE(1.9)
 AC_CONFIG_SRCDIR([config.h.in])
-AM_CONFIG_HEADER([config.h])
+AC_CONFIG_HEADERS([config.h])
 
 # Checks system specific stuff
 AC_CANONICAL_HOST

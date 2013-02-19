@@ -1,3 +1,16 @@
+# Upslug2
+
+**Note:** this repository is a fork from [wspringer](https://github.com/wspringer/upslug2)
+
+I made only a _very_ [little fix](https://github.com/carlesso/upslug2/commit/e3d1163d130e588f91c863b2719018cab7470e38)
+to be able to compile nowdays.
+
+**ALL** credit goes to
+* John Bowler <jbowler at users.sourceforge.net>
+* Roger Nilsson [macosx support]
+
+Thanks for your work. This Repository is also used as source for the [HomeBrew](http://mxcl.github.com/homebrew/) Formula to build it.
+
 This is upslug2.
 
 upslug2 is a command line program intended to allow the upgrade of a LinkSys

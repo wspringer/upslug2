@@ -11,7 +11,16 @@ to be able to compile nowdays.
 
 Thanks for your work. This Repository is also used as source for the [HomeBrew](http://mxcl.github.com/homebrew/) Formula to build it.
 
-This is upslug2.
+To install upslug2 with homebrew simply write:
+
+```
+  $ brew install https://raw.github.com/carlesso/upslug2/master/brew_formula/upslug2.rb
+```
+
+
+-----------------------------------
+
+##This is upslug2.
 
 upslug2 is a command line program intended to allow the upgrade of a LinkSys
 NSLU2 firmware to new or different versions.  Unlike upslug and the LinkSys

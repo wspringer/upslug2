@@ -268,16 +268,27 @@ void parse_mac(unsigned char macBuffer[6], const char *arg) {
 	}
 }
 
-/* Read a 2 byte hex number - range check it to ensure that it will
- * fit in 16 bits.
+/* Read a 2-4 byte hex number
  */
-unsigned short parse_number(const char *arg) {
+unsigned int parse_number32(const char *arg) {
 	char *endp;
 	unsigned long int n(std::strtoul(arg, &endp, 0));
 	if (endp == arg || *endp != 0) {
 		std::fprintf(stderr, "%s: not a valid number\n", arg);
 		std::exit(1);
 	}
+	if (n > 0xffffffff) {
+		std::fprintf(stderr, "%s: number too large\n", arg);
+		std::exit(1);
+	}
+	return n;
+}
+
+/* Read a 2 byte hex number - range check it to ensure that it will
+ * fit in 16 bits.
+ */
+unsigned short parse_number(const char *arg) {
+	unsigned long int n = parse_number32(arg);
 	if (n > 0xffff) {
 		std::fprintf(stderr, "%s: number too large\n", arg);
 		std::exit(1);
@@ -387,6 +398,9 @@ int main(int argc, char **argv) {
 	unsigned short firmware_version(0x2329);
 	unsigned short extra_version(0x90f7);
 
+	bool write_raw(false);
+	unsigned int write_raw_offset(0);
+
 	/* Input files. */
 	const char*    full_image = 0;
 	const char*    kernel = 0;
@@ -410,6 +424,7 @@ int main(int argc, char **argv) {
 { "ramdisk:                  compressed ramdisk image (rootfs)",required_argument, 0, 'r' },
 { "ram-payload:              payload (replaces ramdisk)",       required_argument, 0, 'R' },
 { "rootfs:                   jffs2 (flash) rootfs",             required_argument, 0, 'j' },
+{ "writeraw:                 write raw bytes at offset",        required_argument, 0, 'w' },
 { "payload:                  FIS directory payload",            required_argument, 0, 'p' },
 { "endian[,b,b]:             kernel and data endianness;\n"
   "                          [<kernel>],<data>[,<directory>]\n"
@@ -423,7 +438,7 @@ int main(int argc, char **argv) {
 { 0,                                                            0,                 0,  0  }
 	};
 
-	do switch (getopt_long(argc, argv, "he:d:t:f:vUni:Ck:r:R:j:p:P:T:F:E:", options, 0)) {
+	do switch (getopt_long(argc, argv, "he:d:t:f:vUni:Ck:r:R:j:p:P:T:F:E:w", options, 0)) {
 	case  -1: if (optind < argc) {
 			  std::fprintf(stderr, "%s: unrecognised option\n", argv[optind]);
 			  std::exit(1);
@@ -450,8 +465,10 @@ int main(int argc, char **argv) {
 	case 'T': protocol_id = parse_number(optarg); break;
 	case 'F': firmware_version = parse_number(optarg); break;
 	case 'E': extra_version = parse_number(optarg); break;
+	case 'w': write_raw_offset = parse_number32(optarg); write_raw = true; break;
 	} while (1);
 done:
+
 	if (reprogram) {
 		/* IF you want to test this remove these lines, at your own risk. */
 		std::fprintf(stderr, "--Complete-reprogram: this option is disabled\n");
@@ -475,7 +492,7 @@ done:
 		/* If not given a kernel upgrade is not possible (something must be written
 		 * to the area of flash that RedBoot will load), so just look for slugs.
 		 */
-		if (mac == 0 || !got_kernel) {
+		if (mac == 0 || (!write_raw && !got_kernel)) {
 			Pointer<NSLU2Upgrade::Wire> wire(NSLU2Upgrade::Wire::MakeWire(device, fromMac, 0, euid));
 			Pointer<NSLU2Upgrade::GetHardwareInfo> ghi(
 					NSLU2Upgrade::GetHardwareInfo::MakeGetHardwareInfo(
@@ -521,7 +538,55 @@ done:
 				std::printf("[no NSLU2 machines found in upgrade mode]\n");
 		}
 
-		if (mac && got_kernel) {
+		if (mac && write_raw) {
+			if (!full_image) {
+				std::printf("Please pass the --image argument with the binary data to write\n");
+				std::exit(1);
+			}
+			if (write_raw_offset & 3) {
+				std::printf("Invalid offset, writeraw must write on 4 byte boundries\n");
+				std::exit(1);
+			}
+			std::printf("writeraw write=%d verify=%d\n", !no_upgrade, !no_verify);
+			std::ifstream image_stream(full_image, std::ios::ate | std::ios::binary);
+			if (!image_stream.good()) {
+				std::printf("failed to open file %s\n", full_image);
+				std::exit(1);
+			}
+			int length = image_stream.tellg();
+			if (length & 3) {
+				std::printf("Invalid image size, writeraw must write on 4 byte boundries\n");
+				std::exit(1);
+			}
+			image_stream.seekg(0, std::ios::beg);
+			if (!image_stream.good()) {
+				std::printf("Failed to seek\n");
+				std::exit(1);
+			}
+			char* bytes = (char*)malloc(length);
+			if (!bytes) {
+				std::printf("malloc(%d) -> null\n", length);
+				std::exit(1);
+			}
+			image_stream.read(bytes, length);
+			if (!image_stream.good() || image_stream.tellg() != length) {
+				std::printf("failed to read\n");
+				std::exit(1);
+			}
+
+			Pointer<NSLU2Upgrade::Wire> wire(NSLU2Upgrade::Wire::MakeWire(device, fromMac, mac, euid));
+			ProgressBar progress(reprogram, mac);
+			Pointer<NSLU2Upgrade::DoUpgrade> upgrade(
+				NSLU2Upgrade::DoUpgrade::MakeDoUpgrade(
+					wire.p, &progress, reprogram));
+			if (!no_upgrade) {
+				upgrade.p->Upgrade(write_raw_offset, length, bytes);
+			}
+			if (!no_verify) {
+				upgrade.p->Verify(write_raw_offset, length, bytes);
+			}
+			return 0;
+		} else if (mac && got_kernel) {
 			Pointer<NSLU2Upgrade::Wire> wire(NSLU2Upgrade::Wire::MakeWire(device, fromMac, mac, euid));
 			ProgressBar progress(reprogram, mac);
 
